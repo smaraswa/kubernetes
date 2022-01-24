@@ -6,6 +6,7 @@ echo "[TASK 2] Install docker container engine"
 yum install -y -q yum-utils device-mapper-persistent-data lvm2 > /dev/null 2>&1
 yum install -y -q docker >/dev/null 2>&1
 yum install -y sshpass
+yum install -y openssh-server
 # Enable docker service
 echo "[TASK 3] Enable and start docker service"
 systemctl enable docker >/dev/null 2>&1
