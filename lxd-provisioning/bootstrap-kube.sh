@@ -1,13 +1,16 @@
 #!/bin/bash
 
-echo "[TASK 1] Lxc containers launched already"
+echo "[TASK 1] Lxc containers launched already "
+# using .kublex provision command
+
 
 echo "[TASK 2] Install docker container engine"
 yum install -y -q yum-utils device-mapper-persistent-data lvm2 > /dev/null 2>&1
 yum install -y -q docker >/dev/null 2>&1
 yum install -y sshpass
 yum install -y openssh-server
-# Enable docker service
+
+# Enable Docker service
 echo "[TASK 3] Enable and start docker service"
 systemctl enable docker >/dev/null 2>&1
 systemctl start docker
@@ -69,47 +72,36 @@ echo "export TERM=xterm" >> /etc/bash.bashrc
 
 echo "[TASK 13] Install additional packages"
 yum -y install net-tools >/dev/null 2>&1
+mknod /dev/kmsg c 1 11
+echo 'mknod /dev/kmsg c 1 11' >> /etc/rc.local
+chmod +x /etc/rc.local
 
 
-#######################################
+######################################
 # To be executed only on master nodes #
 #######################################
 
 if [[ $(hostname) =~ .*master.* ]]
 then
 
-  echo "[TASK 7] Pull required containers"
+  echo "[TASK 14] Pull required containers"
   kubeadm config images pull >/dev/null 2>&1
 
-  echo "[TASK 8] Initialize Kubernetes Cluster"
+  echo "[TASK 15] Initialize Kubernetes Cluster"
   kubeadm init --pod-network-cidr=10.244.0.0/16 --ignore-preflight-errors=all >> /root/kubeinit.log 2>&1
 
-  echo "[TASK 9] Copy kube admin config to root user .kube directory"
+  echo "[TASK 16] Copy kube admin config to root user .kube directory"
   mkdir -p $HOME/.kube
   sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
   sudo chown $(id -u):$(id -g) $HOME/.kube/config
-  
-  yum install -qq -y net-tools
-  mknod /dev/kmsg c 1 11
-  echo 'mknod /dev/kmsg c 1 11' >> /etc/rc.local
-  chmod +x /etc/rc.local
-  
-  cat >>/etc/docker/daemon.json<<EOF
-{
-    "exec-opts": ["native.cgroupdriver=systemd"]
-}
-EOF
 
-sudo systemctl daemon-reload
-sudo systemctl restart docker
-sudo systemctl restart kubelet
 
-  echo "[TASK 10] Deploy Flannel network"
+  echo "[TASK 17] Deploy Flannel network"
   kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml > /dev/null 2>&1
 
-  echo "[TASK 11] Generate and save cluster join command to /joincluster.sh"
-  joinCommand=$(kubeadm token create --print-join-command 2>/dev/null) 
-  echo "$joinCommand --ignore-preflight-errors=all" > /joincluster.sh
+  echo "[TASK 18] Generate and save cluster join command to /joincluster.sh"
+  joinCommand=$(kubeadm token create --print-join-command 2>/dev/null)
+  echo "$joinCommand --ignore-preflight-errors=all" >> /joincluster.sh
 
 fi
 
@@ -119,7 +111,7 @@ fi
 
 if [[ $(hostname) =~ .*worker.* ]]
 then
-  echo "[TASK 7] Join node to Kubernetes Cluster"
+  echo "[TASK 19] Join node to Kubernetes Cluster"
   yum install  -y sshpass >/dev/null 2>&1
 
   sshpass -p "kubeadmin" scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no kmaster.lxd:/joincluster.sh /joincluster.sh 2>/tmp/joincluster.log
