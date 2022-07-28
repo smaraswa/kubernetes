@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-deploy-main
+  namespace: default
+  labels:
+    run: nginx-main
+
+spec:
+  type: ClusterIP
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+      name: 
+  selector:
+    run: nginx-main
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-deploy-green
+  namespace: default
+  labels:
+    run: nginx-green
+
+spec:
+  type: ClusterIP
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+      name: 
+  selector:
+    run: nginx-green
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-deploy-blue
+  namespace: default
+  labels:
+    run: nginx-blue
+
+spec:
+  type: ClusterIP
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+      name: 
+  selector:
+    run: nginx-blue
+
+
+
+
