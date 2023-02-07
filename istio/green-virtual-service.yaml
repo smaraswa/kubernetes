@@ -1,0 +1,17 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: nginx-deploy-green
+  namespace: istio-system
+spec:
+  hosts:
+  - "green.saturn.com"
+  gateways:
+  - myweb-gateway
+  http:
+  - route:
+      - destination:
+          host: nginx-deploy-green.webzone.svc.cluster.local
+          port:
+              number: 80
+    timeout: 30s

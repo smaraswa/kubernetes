@@ -1,0 +1,33 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      if ($request_uri !~ "^/(c|e)-*") {
+        return 403;
+      }
+      if ($request_uri ~ "^(/(c-|e-))") {
+          rewrite ^/app-name(/|$)(.*) /$2 break;
+      }
+
+    nginx.ingress.kubernetes.io/use-regex: "true"
+
+  name: rtf-ingress-template
+  namespace: rtf
+spec:
+  ingressClassName: rtf-nginx
+  tls:
+  - hosts:
+    - es-ms-np.thermofisher.com
+    secretName: tfs-dev-tls
+  rules:
+  - host: es-ms-np.thermofisher.com
+    http:
+      paths:
+      - path: /app-name
+        pathType: Prefix
+        backend:
+          service:
+            name: service
+            port:
+              number: 443

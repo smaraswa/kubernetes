@@ -1,0 +1,194 @@
+cat <<EOF>> /etc/hosts
+
+192.168.56.201 kmaster1  kmaster1.saturn.com
+192.168.56.202 kmaster2  kmaster2.saturn.com
+192.168.56.203 kworker1	 kworker1.saturn.com
+192.168.56.205 lb1		 lb1.saturn.com
+192.168.56.210 lb2		 lb2.saturn.com
+EOF
+
+===============================================================
+
+On both Lb1 and Lb2 nodes
+
+yum install -y keepalived haproxy
+
+===============================================================
+vi /etc/haproxy/haproxy.cfg
+
+global
+    log /dev/log  local0 warning
+    chroot      /var/lib/haproxy
+    pidfile     /var/run/haproxy.pid
+    maxconn     4000
+    user        haproxy
+    group       haproxy
+    daemon
+
+   stats socket /var/lib/haproxy/stats
+
+defaults
+  log global
+  option  httplog
+  option  dontlognull
+        timeout connect 5000
+        timeout client 50000
+        timeout server 50000
+
+frontend kube-apiserver
+  bind *:6443
+  mode tcp
+  option tcplog
+  default_backend kube-apiserver
+
+backend kube-apiserver
+    mode tcp
+    option tcplog
+    option tcp-check
+    balance roundrobin
+    default-server inter 10s downinter 5s rise 2 fall 2 slowstart 60s maxconn 250 maxqueue 256 weight 100
+    server kmaster1 192.168.56.201:6443 check # Replace the IP address with your own.
+    server kmaster2 192.168.56.202:6443 check # Replace the IP address with your own.
+
+
+===================================================================
+
+vi /etc/keepalived/keepalived.conf
+
+global_defs {
+  notification_email {
+  }
+  router_id LVS_DEVEL
+  vrrp_skip_check_adv_addr
+  vrrp_garp_interval 0
+  vrrp_gna_interval 0
+}
+
+vrrp_script chk_haproxy {
+  script "killall -0 haproxy"
+  interval 2
+  weight 2
+}
+
+vrrp_instance haproxy-vip {
+  state BACKUP
+  priority 100
+  interface enp0s8                       # Network card
+  virtual_router_id 60
+  advert_int 1
+  authentication {
+    auth_type PASS
+    auth_pass 1111
+  }
+  unicast_src_ip 192.168.56.205      # The IP address of this machine
+  unicast_peer {
+    192.168.56.210                         # The IP address of peer machines (change this as per nodes )
+  }
+
+  virtual_ipaddress {
+    192.168.56.200                  # The VIP address
+  }
+
+  track_script {
+    chk_haproxy
+  }
+}
+
+======================================================================
+
+cat >> /etc/keepalived/check_apiserver.sh <<EOF
+#!/bin/sh
+
+errorExit() {
+  echo "*** $@" 1>&2
+  exit 1
+}
+
+curl --silent --max-time 2 --insecure https://localhost:6443/ -o /dev/null || errorExit "Error GET https://localhost:6443/"
+if ip addr | grep -q 172.16.16.100; then
+  curl --silent --max-time 2 --insecure https://172.16.16.100:6443/ -o /dev/null || errorExit "Error GET https://172.16.16.100:6443/"
+fi
+EOF
+
+chmod +x /etc/keepalived/check_apiserver.sh
+
+
+=======================================
+
+
+systemctl enable --now keepalived
+systemctl enable --now haproxy
+
+systemctl start keepalived
+systemctl start haproxy
+
+
+systemctl restart keepalived && systemctl status keepalived
+systemctl restart haproxy && systemctl status haproxy
+================================
+
+swapoff -a; sed -i '/swap/d' /etc/fstab
+
+
+{
+cat >> /etc/modules-load.d/containerd.conf <<EOF
+overlay
+br_netfilter
+EOF
+
+modprobe overlay
+modprobe br_netfilter
+}
+
+
+{
+cat >>/etc/sysctl.d/kubernetes.conf<<EOF
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables  = 1
+net.ipv4.ip_forward                 = 1
+EOF
+
+sysctl --system
+}
+
+
+{
+  apt update
+  apt install -y containerd apt-transport-https
+  mkdir /etc/containerd
+  containerd config default > /etc/containerd/config.toml
+  systemctl restart containerd
+  systemctl enable containerd
+}
+
+
+====================================================
+
+next install kubernets on masters and workers nodes
+
+
+on kmaster1 : 
+
+kubeadm init --control-plane-endpoint="192.168.56.200:6443" --upload-certs --apiserver-advertise-address=192.168.56.201 --pod-network-cidr=192.168.0.0/16 --ignore-preflight-errors Swap
+
+
+on kmaster2 :
+
+you will receive out like below and that needs to execute in kmaster 2 and change the kamster IP
+
+kubeadm join 192.168.56.200:6443 --token 7wy3uj.ujk2nvv8s8yk9udo \
+        --discovery-token-ca-cert-hash sha256:1fe438d79494f3e81f0b8b8a90f439b59fdf063fbfbfa7ac286034f7e9bfdf4d \
+        --control-plane --certificate-key 1fa1069478b271e96f3cc7b85c68def4517a32ca0b873c28dd1563cc9c00a14f  --apiserver-advertise-address=192.168.56.202
+
+
+on kworker2 :
+
+kubeadm join 192.168.56.200:6443 --token 7wy3uj.ujk2nvv8s8yk9udo \
+         --discovery-token-ca-cert-hash sha256:1fe438d79494f3e81f0b8b8a90f439b59fdf063fbfbfa7ac286034f7e9bfdf4d --ignore-preflight-errors Swap
+         
+
+on kmaster 1:
+
+kubectl get nodes -o wide
+
+
